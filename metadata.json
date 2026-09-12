@@ -1,0 +1,6 @@
+{
+  "name": "Our FamilySync",
+  "description": "Real-time native family location tracking, safe geofence zones, and live check-in alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

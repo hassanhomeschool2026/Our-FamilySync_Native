@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Local: plain `vite` (5173) has no Functions. Use `npm run dev:netlify` → http://localhost:8888
+# so `/.netlify/functions/*` works. Vite must use `--mode netlify-dev` (see vite.config.js) so HMR
+# and module URLs go through the proxy — otherwise JS loads with wrong/empty MIME types (blank page).
+[dev]
+  framework = "vite"
+  command = "npm run dev:vite-netlify"
+  targetPort = 5173
+  port = 8888
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# 13:00 UTC daily (8am US Central during CDT). @netlify/plugin-cron is not published on npm;
+# Netlify scheduled functions use this block instead.
+[functions."daily-reminder"]
+  schedule = "0 13 * * *"

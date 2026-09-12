@@ -1,0 +1,941 @@
+import React, { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
+import { supabase } from '@/lib/supabaseClient';
+import { subscribeToPush } from '@/lib/pushNotifications';
+import { useFamily } from '@/lib/familyContext';
+import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { MEMBER_COLORS } from '@/lib/memberColors';
+import MemberAvatar from '@/components/shared/MemberAvatar';
+import { getPlanDisplayLabel, isFamilyBillingAdmin } from '@/lib/subscriptionPlan';
+import {
+  Settings, Shield, LogOut, Crown, Bell, ChevronRight, ChevronDown, Trash2, Camera, Sun, Moon, Monitor, Check,
+  KeyRound,
+} from 'lucide-react';
+
+const sectionHeaderBarStyle = {
+  background: 'linear-gradient(135deg, #01dcba 0%, #0ea5e9 45%, #1e3a8a 100%)',
+  boxShadow: '0 6px 20px rgba(30, 58, 138, 0.15)',
+  padding: '12px 16px',
+};
+
+const sectionHeaderOverlayStyle = {
+  background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0))',
+};
+
+const CREATE_PORTAL_SESSION_URL = import.meta.env.DEV
+  ? 'http://localhost:8888/.netlify/functions/create-portal-session'
+  : '/.netlify/functions/create-portal-session';
+
+const GRADIENT_HEADER_STAR_TWINKLE_CSS = `
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+`;
+
+const GRADIENT_HEADER_STARS = [
+  { left: '5%', top: '25%', size: 1.8, delay: '0s', dur: '2.2s' },
+  { left: '12%', top: '65%', size: 1.4, delay: '0.6s', dur: '3s' },
+  { left: '22%', top: '30%', size: 2.2, delay: '1.1s', dur: '2.5s' },
+  { left: '33%', top: '70%', size: 1.4, delay: '0.3s', dur: '2.8s' },
+  { left: '45%', top: '20%', size: 1.8, delay: '1.5s', dur: '2s' },
+  { left: '56%', top: '68%', size: 1.4, delay: '0.8s', dur: '3.2s' },
+  { left: '66%', top: '28%', size: 2, delay: '0.4s', dur: '2.4s' },
+  { left: '76%', top: '72%', size: 1.4, delay: '1.3s', dur: '2.7s' },
+  { left: '86%', top: '35%', size: 2.2, delay: '0.2s', dur: '2.1s' },
+  { left: '94%', top: '68%', size: 1.4, delay: '1.8s', dur: '3.1s' },
+];
+
+function GradientHeaderStarField() {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+        borderRadius: 'inherit',
+        zIndex: 0,
+      }}
+    >
+      {GRADIENT_HEADER_STARS.map((s, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: s.left,
+            top: s.top,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            borderRadius: '50%',
+            background: 'white',
+            animation: `starTwinkle ${s.dur} ease-in-out infinite`,
+            animationDelay: s.delay,
+            boxShadow: `0 0 ${s.size * 2}px rgba(255,255,255,0.8)`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+  { value: 'system', label: 'System', Icon: Monitor },
+];
+
+export default function ProfilePage() {
+  const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+  const { currentUser, family, members, isAdmin, isPremium, reload } = useFamily();
+  const isBillingAdmin = isFamilyBillingAdmin(currentUser);
+  const [editing, setEditing] = useState(false);
+  const [displayName, setDisplayName] = useState(currentUser?.display_name || '');
+  const [color, setColor] = useState(currentUser?.member_color || MEMBER_COLORS[0].value);
+  const [saving, setSaving] = useState(false);
+  const [showNotifPrefs, setShowNotifPrefs] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [requestDeleteConfirmText, setRequestDeleteConfirmText] = useState('');
+  const [showRequestDeleteModal, setShowRequestDeleteModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [sendingLeave, setSendingLeave] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(
+    () => localStorage.getItem('fs_sound_effects') !== 'false'
+  );
+  const [notifPerm, setNotifPerm] = useState(
+    () =>
+      typeof window !== 'undefined' && typeof Notification !== 'undefined'
+        ? Notification.permission
+        : 'denied'
+  );
+  const [enablingNotif, setEnablingNotif] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const prefs = currentUser?.notification_prefs || {};
+
+  const memberList = members || [];
+  const otherMembers = memberList.filter((m) => m.id !== currentUser?.id);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setDisplayName(currentUser.display_name || currentUser.full_name || '');
+    setColor(currentUser.member_color || MEMBER_COLORS[0].value);
+  }, [currentUser]);
+
+  const deleteAccountDescription = (() => {
+    if (isAdmin && otherMembers.length > 0) {
+      return `You are the admin of this family. Another member will be promoted to admin, then your profile will be removed from the family. This cannot be undone.`;
+    }
+    if (isAdmin && otherMembers.length === 0) {
+      return `You are the only member. Your family will be deleted and your profile will be removed from the family. This cannot be undone.`;
+    }
+    return `You will be removed from this family. This cannot be undone.`;
+  })();
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ display_name: displayName, member_color: color })
+        .eq('id', currentUser.id);
+      if (error) throw error;
+      await reload();
+      setEditing(false);
+      toast.success('Profile updated.');
+    } catch (error) {
+      console.error('Profile update failed:', error);
+      toast.error('Could not save your profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleNotifPref = async (key, value) => {
+    const updated = { ...prefs, [key]: value };
+    await supabase
+      .from('profiles')
+      .update({ notification_prefs: updated })
+      .eq('id', currentUser.id);
+    // Silent reload: full reload() sets loading=true and FamilyGate unmounts all routes,
+    // which remounts ProfilePage and resets showNotifPrefs to false.
+    await reload({ silent: true });
+  };
+
+  const handleEnablePushNotifications = async () => {
+    if (typeof Notification === 'undefined') {
+      toast.error('Notifications are not supported in this browser.');
+      return;
+    }
+    setEnablingNotif(true);
+    try {
+      const result = await Notification.requestPermission();
+      setNotifPerm(result);
+      if (result === 'granted') {
+        if (!currentUser?.id || !family?.id) {
+          toast.error('Family not loaded yet. Try again in a moment.');
+          return;
+        }
+        await subscribeToPush(currentUser.id, family.id, supabase);
+        toast.success('Notifications enabled!');
+      } else if (result === 'denied') {
+        toast.error('Please enable notifications in your phone settings.');
+      }
+    } catch {
+      toast.error('Could not enable notifications.');
+    } finally {
+      setEnablingNotif(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    const name = currentUser?.display_name || currentUser?.full_name || 'A member';
+    await supabase.from('feed_items').insert({
+      family_id: family.id,
+      user_id: currentUser.id,
+      user_name: name,
+      user_avatar: currentUser.avatar,
+      type: 'family_alert',
+      message: `${name} signed out of Our FamilySync.`,
+    });
+    await supabase.auth.signOut();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      toast.error('Please type DELETE to confirm.');
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('No session');
+
+      // Handle admin family transfer before deletion
+      if (isAdmin && otherMembers.length > 0) {
+        const nextAdmin = otherMembers[0];
+        await supabase.from('profiles').update({ role: 'admin' }).eq('id', nextAdmin.id);
+        toast.info(`${nextAdmin.display_name || nextAdmin.full_name} has been promoted to admin.`);
+      }
+
+      const res = await fetch('/.netlify/functions/delete-account', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+      toast.success('Your account has been deleted.');
+      await supabase.auth.signOut();
+    } catch (e) {
+      toast.error('Something went wrong. Please try again.');
+      console.error(e);
+      setDeletingAccount(false);
+    }
+  };
+
+  const handleRequestDelete = async () => {
+    if (requestDeleteConfirmText !== 'DELETE') {
+      toast.error('Please type DELETE to confirm.');
+      return;
+    }
+    const name = currentUser?.display_name || currentUser?.full_name || 'A member';
+    const admins = members.filter(m => m.role === 'admin');
+    if (admins.length > 0) {
+      await supabase.from('notifications').insert(
+        admins.map(a => ({
+          user_id: a.id,
+          type: 'family_alert',
+          message: `${name} has requested to delete their account.|${currentUser.id}`,
+          read: false,
+        }))
+      );
+    }
+    await supabase.from('feed_items').insert({
+      family_id: family.id,
+      user_id: currentUser.id,
+      user_name: name,
+      user_avatar: currentUser.avatar,
+      type: 'family_alert',
+      message: `${name} has requested to delete their account.`,
+    });
+    setShowRequestDeleteModal(false);
+    setRequestDeleteConfirmText('');
+    toast.success('Your request has been sent to the admin.');
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError('New password must be different from your current password.');
+      return;
+    }
+
+    setChangingPassword(true);
+
+    // Re-authenticate with current password first
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: currentUser.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      setPasswordError('Current password is incorrect.');
+      setChangingPassword(false);
+      return;
+    }
+
+    // Now update to new password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      setPasswordError(updateError.message);
+      setChangingPassword(false);
+      return;
+    }
+
+    setChangingPassword(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowChangePassword(false);
+    toast.success('Password updated successfully!');
+  };
+
+  const handleOpenBillingPortal = async () => {
+    if (!currentUser?.id) {
+      toast.error('Could not load your account. Please refresh and try again.');
+      return;
+    }
+    setPortalLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Please sign out and sign back in, then try again.');
+        return;
+      }
+
+      const response = await fetch(CREATE_PORTAL_SESSION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId: currentUser.id }),
+      });
+
+      const raw = await response.text();
+      let data = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          // Non-JSON body (e.g. Vite 404 HTML)
+        }
+      }
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          toast.error(
+            'Billing portal needs Netlify Functions. Use npm run dev:netlify and open the URL it shows (not :5173 alone).'
+          );
+        } else {
+          console.error('[billing portal]', response.status, data.error || raw);
+          toast.error(data.error || `Could not open billing portal (${response.status}).`);
+        }
+        return;
+      }
+
+      if (data.url) {
+        window.location.assign(data.url);
+      } else {
+        toast.error(data.error || 'Could not open billing portal');
+      }
+    } catch (err) {
+      console.error('Billing portal error:', err);
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser?.id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File must be 5MB or less.');
+      e.target.value = '';
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${currentUser.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, {
+        upsert: true,
+        contentType: file.type || 'image/jpeg',
+      });
+      if (uploadError) throw uploadError;
+      const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = pub.publicUrl;
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', currentUser.id);
+      if (updateError) throw updateError;
+      setAvatarUrl(publicUrl);
+      await reload();
+      toast.success('Photo updated!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not upload photo.');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div>
+      <div
+        className="surface-3 mb-2 relative overflow-hidden"
+        style={sectionHeaderBarStyle}
+      >
+        <GradientHeaderStarField />
+        <style>{GRADIENT_HEADER_STAR_TWINKLE_CSS}</style>
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={sectionHeaderOverlayStyle}
+          aria-hidden
+        />
+        <h2 className="relative z-[1] font-heading text-xl font-bold text-white">Settings</h2>
+      </div>
+
+      {/* Profile Card */}
+      <div className="bg-gradient-to-br from-card to-[#7f30cb]/[0.04] dark:to-[#7f30cb]/[0.08] border border-border rounded-xl p-4 mb-4">
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0">
+            <MemberAvatar
+              avatar={currentUser?.avatar}
+              avatarUrl={avatarUrl || currentUser?.avatar_url}
+              color={currentUser?.member_color}
+              size="xl"
+              name={currentUser?.display_name || currentUser?.full_name}
+            />
+            <label className="absolute bottom-0 right-0 w-6 h-6 bg-primary rounded-full flex items-center justify-center cursor-pointer">
+              <Camera className="w-3 h-3 text-primary-foreground" />
+              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+            </label>
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-heading font-bold text-lg">{currentUser?.display_name || currentUser?.full_name}</h3>
+              {isPremium && <Crown className="w-4 h-4 text-yellow-500" />}
+            </div>
+            <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                  currentUser?.role === 'admin'
+                    ? 'bg-[rgba(127,48,203,0.14)] dark:bg-[rgba(167,139,250,0.12)] text-[#7f30cb] dark:text-violet-300'
+                    : 'bg-secondary text-secondary-foreground'
+                }`}
+              >
+                {currentUser?.role}
+              </span>
+              <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-medium">
+                {family?.name}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {!editing ? (
+          <Button
+            variant="outline"
+            onClick={() => setEditing(true)}
+            className="w-full mt-4 rounded-xl"
+          >
+            <Settings className="w-4 h-4 mr-2" /> Edit Profile
+          </Button>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div>
+              <Label>Display Name</Label>
+              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label className="mb-2 block">Color</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {MEMBER_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => setColor(c.value)}
+                    className={`w-9 h-9 rounded-lg ${color === c.value ? 'ring-2 ring-offset-2 ring-[#2f9db6]' : ''}`}
+                    style={{ backgroundColor: c.value }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSaveProfile} disabled={saving} className="flex-1 rounded-xl">
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button variant="outline" onClick={() => setEditing(false)} className="rounded-xl">Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Menu Items */}
+      <div className="surface-1 divide-y divide-border overflow-hidden mb-4">
+        <div className="p-4">
+          <div
+            className="relative mb-3 overflow-hidden rounded-xl"
+            style={sectionHeaderBarStyle}
+          >
+            <GradientHeaderStarField />
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={sectionHeaderOverlayStyle}
+              aria-hidden
+            />
+            <div className="relative z-[1] flex items-center gap-3">
+              <Sun className="w-5 h-5 shrink-0 text-[rgba(255,255,255,0.9)]" />
+              <span className="text-sm font-medium text-white">Theme</span>
+            </div>
+          </div>
+          <div className="flex rounded-lg bg-secondary/60 dark:bg-secondary/40 p-0.5 gap-0.5">
+            {THEME_OPTIONS.map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTheme(value)}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-md text-[10px] font-semibold transition-colors ${
+                  theme === value
+                    ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Subscription */}
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0 pr-2">
+            <Label className="text-sm">Plan</Label>
+            <p className="text-xs text-muted-foreground">
+              {getPlanDisplayLabel(currentUser, isPremium, members)}
+            </p>
+          </div>
+          {isPremium && isBillingAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-xl text-xs"
+              disabled={portalLoading || !currentUser?.id}
+              onClick={handleOpenBillingPortal}
+            >
+              {portalLoading ? 'Opening…' : 'Manage Subscription'}
+            </Button>
+          ) : !isPremium && isAdmin ? (
+            <Button
+              size="sm"
+              className="shrink-0 rounded-xl text-xs"
+              onClick={() => navigate('/upgrade')}
+            >
+              Upgrade
+            </Button>
+          ) : null}
+        </div>
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0 pr-2">
+            <Label htmlFor="sound-effects" className="text-sm">
+              Sound Effects
+            </Label>
+            <p className="text-xs text-muted-foreground">Chimes for check-ins and completed tasks</p>
+          </div>
+          <Switch
+            id="sound-effects"
+            checked={soundEnabled}
+            onCheckedChange={(checked) => {
+              localStorage.setItem('fs_sound_effects', String(checked));
+              setSoundEnabled(checked);
+            }}
+          />
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Push Notifications</Label>
+            <p className="text-xs text-muted-foreground">
+              Get alerted when family sends an alert, tasks are due, or events are today.
+            </p>
+          </div>
+          {notifPerm === 'granted' ? (
+            <div
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+              role="status"
+            >
+              <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+              Notifications On
+            </div>
+          ) : (
+            <Button
+              type="button"
+              className="w-full rounded-xl sm:w-auto"
+              disabled={enablingNotif || !currentUser?.id || !family?.id}
+              onClick={handleEnablePushNotifications}
+            >
+              {enablingNotif ? 'Enabling...' : 'Enable Notifications'}
+            </Button>
+          )}
+        </div>
+        <div
+          onClick={() => setShowNotifPrefs(!showNotifPrefs)}
+          className="flex items-center justify-between w-full p-4 hover:bg-secondary/50 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <Bell className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm font-medium">Notification Preferences</span>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showNotifPrefs ? 'rotate-180' : ''}`} />
+        </div>
+
+        {showNotifPrefs && (
+          <div className="p-4 space-y-4 bg-secondary/20">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Day-before reminders</Label>
+              <Switch
+                checked={prefs.day_before_reminder !== false}
+                onCheckedChange={(v) => toggleNotifPref('day_before_reminder', v)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Task due reminders</Label>
+              <Switch
+                checked={prefs.task_due_reminders !== false}
+                onCheckedChange={(v) => toggleNotifPref('task_due_reminders', v)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Family alerts</Label>
+              <Switch
+                checked={prefs.family_alerts !== false}
+                onCheckedChange={(v) => toggleNotifPref('family_alerts', v)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Check-in notifications</Label>
+              <Switch
+                checked={prefs.checkin_notifications !== false}
+                onCheckedChange={(v) => toggleNotifPref('checkin_notifications', v)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <Link to="/admin" className="flex items-center justify-between w-full p-4 hover:bg-secondary/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Admin Panel</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+        )}
+
+        {!isPremium && isAdmin && (
+          <Link to="/upgrade" className="flex items-center justify-between w-full p-4 hover:bg-secondary/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <Crown className="w-5 h-5 text-yellow-500" />
+              <span className="text-sm font-medium text-yellow-600">Upgrade to Premium</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+        )}
+      </div>
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden mb-4">
+        <button
+          type="button"
+          onClick={() => {
+            setShowChangePassword(!showChangePassword);
+            setPasswordError('');
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+          }}
+          className="flex items-center justify-between w-full p-4 hover:bg-secondary/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <KeyRound className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm font-medium">Change Password</span>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showChangePassword ? 'rotate-180' : ''}`} />
+        </button>
+
+        {showChangePassword && (
+          <div className="px-4 pb-4 space-y-3 border-t border-border pt-4">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">Current Password</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">New Password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            {passwordError && (
+              <p className="text-xs text-red-500 font-medium">{passwordError}</p>
+            )}
+
+            <Button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+              className="w-full rounded-xl"
+              size="sm"
+            >
+              {changingPassword ? 'Updating...' : 'Update Password'}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="surface-1 divide-y divide-border overflow-hidden">
+        <button onClick={handleLogout} className="flex items-center gap-3 w-full p-4 hover:bg-secondary/50 transition-colors">
+          <LogOut className="w-5 h-5 text-muted-foreground" />
+          <span className="text-sm font-medium">Sign Out</span>
+        </button>
+
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-3 w-full p-4 hover:bg-destructive/5 transition-colors"
+          >
+            <Trash2 className="w-5 h-5 text-destructive" />
+            <span className="text-sm font-medium text-destructive">Delete Account</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => { setShowRequestDeleteModal(true); setRequestDeleteConfirmText(''); }}
+              className="flex items-center gap-3 w-full p-4 hover:bg-destructive/5 transition-colors"
+            >
+              <Trash2 className="w-5 h-5 text-destructive" />
+              <span className="text-sm font-medium text-destructive">Delete Account</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLeaveModal(true)}
+              className="flex items-center gap-3 w-full p-4 hover:bg-secondary/50 transition-colors"
+            >
+              <LogOut className="w-5 h-5 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Request to Leave Family</span>
+            </button>
+          </>
+        )}
+      </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-heading font-bold text-lg text-destructive">Delete Account</h3>
+            <p className="text-sm text-muted-foreground">{deleteAccountDescription}</p>
+            <p className="text-sm font-medium">Type the word <span className="font-bold text-destructive">&quot;DELETE&quot;</span> below:</p>
+            <Input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder=""
+              className="h-12 font-mono tracking-widest"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirmText(''); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount || deleteConfirmText !== 'DELETE'}
+              >
+                {deletingAccount ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRequestDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-heading font-bold text-lg text-destructive">Request Account Deletion</h3>
+            <p className="text-sm text-muted-foreground">Your request will be sent to the family admin for approval. You will stay in the family until they approve it.</p>
+            <p className="text-sm font-medium">Type the word <span className="font-bold text-destructive">&quot;DELETE&quot;</span> below:</p>
+            <Input
+              value={requestDeleteConfirmText}
+              onChange={(e) => setRequestDeleteConfirmText(e.target.value)}
+              placeholder=""
+              className="h-12 font-mono tracking-widest"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => { setShowRequestDeleteModal(false); setRequestDeleteConfirmText(''); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleRequestDelete}
+                disabled={requestDeleteConfirmText !== 'DELETE'}
+              >
+                Send Request
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-heading font-bold text-lg">Request to Leave Family?</h3>
+            <p className="text-sm text-muted-foreground">Your request will be sent to the family admin for approval. You will stay in the family until they approve it.</p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setShowLeaveModal(false)}
+                disabled={sendingLeave}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                disabled={sendingLeave}
+                onClick={async () => {
+                  setSendingLeave(true);
+                  const name = currentUser?.display_name || currentUser?.full_name || 'A member';
+                  const admins = members.filter(m => m.role === 'admin');
+                  if (admins.length > 0) {
+                    await supabase.from('notifications').insert(
+                      admins.map(a => ({
+                        user_id: a.id,
+                        type: 'family_alert',
+                        message: `${name} has requested to leave the family.|${currentUser.id}`,
+                        read: false,
+                      }))
+                    );
+                  }
+                  await supabase.from('feed_items').insert({
+                    family_id: family.id,
+                    user_id: currentUser.id,
+                    user_name: name,
+                    user_avatar: currentUser.avatar,
+                    type: 'family_alert',
+                    message: `${name} has requested to leave the family.`,
+                  });
+                  setSendingLeave(false);
+                  setShowLeaveModal(false);
+                  toast.success('Your request has been sent to the admin.');
+                }}
+              >
+                {sendingLeave ? 'Sending...' : 'Send Request'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="text-center mt-6 space-y-2 pb-2">
+        <p className="text-[11px] text-muted-foreground">
+          © 2026 Zencora. All Rights Reserved.
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <a
+            href="/terms"
+            className="text-[11px] text-primary hover:underline"
+          >
+            Terms of Service
+          </a>
+          <span className="text-muted-foreground/40 text-[11px]">·</span>
+          <a
+            href="/privacy"
+            className="text-[11px] text-primary hover:underline"
+          >
+            Privacy Policy
+          </a>
+        </div>
+        <p className="text-[10px] text-muted-foreground/50">
+          Our FamilySync · Built by Zencora
+        </p>
+      </div>
+    </div>
+  );
+}

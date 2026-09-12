@@ -1,0 +1,234 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --font-heading: 'Nunito', sans-serif;
+    --font-body: 'Inter', sans-serif;
+
+    --background: 0 0% 100%;
+    --foreground: 220 25% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 14%;
+    /* Brand primary #1e3a8a */
+    --primary: 222 64% 33%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 40% 94%;
+    --secondary-foreground: 270 30% 25%;
+    --muted: 270 30% 94%;
+    --muted-foreground: 270 10% 46%;
+    --accent: 12 80% 62%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 270 20% 88%;
+    --input: 270 20% 88%;
+    --ring: 222 64% 33%;
+    --chart-1: 191 59% 45%;
+    --chart-2: 12 80% 62%;
+    --chart-3: 43 96% 56%;
+    --chart-4: 262 52% 55%;
+    --chart-5: 200 65% 50%;
+    --radius: 0.75rem;
+    --sidebar-background: 30 33% 98%;
+    --sidebar-foreground: 220 25% 14%;
+    --sidebar-primary: 191 59% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 270 40% 94%;
+    --sidebar-accent-foreground: 270 30% 25%;
+    --sidebar-border: 270 20% 88%;
+    --sidebar-ring: 191 59% 45%;
+
+    /* Calendar / premium surfaces (alias tokens) */
+    --color-background-primary: hsl(var(--card));
+    --color-text-primary: hsl(var(--foreground));
+    --color-text-secondary: hsl(var(--muted-foreground));
+  }
+
+  .dark {
+    color-scheme: dark;
+    /* Brand-aligned dark surfaces: #0F1720 bg, #18212B card, #1D2A36 elevated */
+    --background: 210 36% 9%;
+    --foreground: 210 20% 97%;
+    --card: 212 28% 13%;
+    --card-foreground: 210 20% 97%;
+    --popover: 212 28% 13%;
+    --popover-foreground: 210 20% 97%;
+    --primary: 191 59% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 30% 16%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 212 22% 12%;
+    --muted-foreground: 213 14% 71%;
+    --accent: 12 72% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 45%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 213 12% 22%;
+    --input: 213 12% 22%;
+    --ring: 191 59% 52%;
+    --chart-1: 191 59% 52%;
+    --chart-2: 12 72% 55%;
+    --chart-3: 43 90% 52%;
+    --chart-4: 271 62% 55%;
+    --chart-5: 200 60% 48%;
+    --sidebar-background: 210 36% 9%;
+    --sidebar-foreground: 210 20% 97%;
+    --sidebar-primary: 191 59% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 30% 16%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 213 12% 22%;
+    --sidebar-ring: 191 59% 52%;
+
+    --color-background-primary: hsl(var(--card));
+    --color-text-primary: hsl(var(--foreground));
+    --color-text-secondary: hsl(var(--muted-foreground));
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground font-body;
+    min-height: 100vh;
+    background: linear-gradient(
+      180deg,
+      rgba(1, 220, 186, 0.06) 0%,
+      rgba(59, 130, 246, 0.05) 60%,
+      rgba(127, 48, 203, 0.03) 100%
+    );
+  }
+
+  html.dark body {
+    background: hsl(var(--background));
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+}
+
+/* Home hero weather scene (HomePage.jsx) */
+@keyframes hero-weather-rain-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(120px);
+  }
+}
+
+.hero-weather-rain {
+  animation: hero-weather-rain-fall 1.25s ease-in infinite;
+}
+
+@keyframes hero-weather-orb-pulse {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.05);
+  }
+}
+
+.hero-weather-orb {
+  animation: hero-weather-orb-pulse 4.5s ease-in-out infinite;
+}
+
+@keyframes hero-weather-star-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.hero-weather-star {
+  animation: hero-weather-star-pulse 3.2s ease-in-out infinite;
+}
+
+@keyframes hero-weather-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-8px);
+    opacity: 0.28;
+  }
+}
+
+.hero-weather-drift {
+  animation: hero-weather-drift 5s ease-in-out infinite;
+}
+
+.surface-1 {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.surface-2 {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.surface-3 {
+  background: linear-gradient(135deg, rgba(127, 48, 203, 0.05) 0%, rgba(47, 157, 182, 0.05) 100%);
+  border-radius: 16px;
+}
+
+/* Dark mode surfaces */
+.dark .surface-1 {
+  background: hsl(212, 28%, 13%);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.dark .surface-2 {
+  background: hsl(210, 30%, 16%);
+  border: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+}
+
+.dark .surface-3 {
+  background: linear-gradient(135deg, rgba(127,48,203,0.08) 0%, rgba(47,157,182,0.08) 100%);
+}
+
+@layer components {
+  .auth-screen-input {
+    @apply rounded-xl border border-black/[0.08] bg-white shadow-none text-foreground placeholder:text-muted-foreground;
+  }
+
+  .auth-screen-input:focus-visible {
+    @apply outline-none border-[#0d9488] ring-0 ring-offset-0;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  }
+
+  .dark .auth-screen-input {
+    @apply bg-card border-white/10;
+  }
+}
